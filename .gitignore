@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+
+# Environment and Credentials
+.env
+.env.*
+*.key
+*.pem
+*.cert
+*.json-credentials
+*credentials*.json
+.gcloud/
+.adc/
+adc.json
+
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+.turbo/
+
+# Elastic Agent
+elastic-agent-*/
+**/elastic-agent-*/
+
+# Analysis outputs (regenerated)
+zeek_logs/
+suricata_logs/
+*.pcap
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Heavy Binaries & Archives
+*.tar.gz
+*.tgz
+*.zip
+*.mmdb
+
+# Scratch / temp
+scratch/
+extracted_*.bin

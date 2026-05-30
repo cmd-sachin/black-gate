@@ -1,0 +1,8 @@
+backend/node_modules
+backend/elastic-agent-9.4.1-darwin-aarch64
+backend/elastic-agent-9.4.1-darwin-aarch64.tar.gz
+frontend/node_modules
+.git
+.env
+__pycache__
+*.pyc

@@ -1,0 +1,111 @@
+{
+  "tools": [
+    {
+      "name": "enrich_investigation_entities",
+      "type": "workflow",
+      "description": "Enrich investigation entities with GeoLite2 MMDB context, inferred attacker/victim roles, country relationships, and recent-news/threat-intel query leads.",
+      "input_schema": {
+        "ips": "array",
+        "domains": "array",
+        "alert_ids": "array"
+      },
+      "output_schema": {
+        "entities": "object",
+        "relationship": "object",
+        "news_context_queries": "array"
+      },
+      "when_to_use": "Use before writing the incident story, attacker motive hypothesis, or country relationship analysis."
+    },
+    {
+      "name": "search_security_context",
+      "type": "index_search",
+      "description": "Search Blackgate alerts, incidents, campaigns, MITRE knowledge, and agent memory for context relevant to a SOC investigation.",
+      "indices": [
+        "security-alerts",
+        "security-incidents",
+        "blackgate.campaigns",
+        "blackgate.mitre_knowledge",
+        "blackgate.agent_memory"
+      ],
+      "query_fields": [
+        "alert",
+        "rule.name",
+        "summary",
+        "narrative",
+        "campaign.name",
+        "campaign.description",
+        "technique.name",
+        "detection_notes",
+        "memory.text",
+        "entities.ips",
+        "entities.domains"
+      ],
+      "when_to_use": "Use first when the analyst asks a broad question or when the agent needs historical memory."
+    },
+    {
+      "name": "timeline_by_entity",
+      "type": "esql",
+      "description": "Build a chronological timeline for an IP, host, domain, user, or DNS query across local alerts and Elastic Security alerts.",
+      "params": {
+        "entity": "string"
+      },
+      "esql": "FROM security-alerts, .alerts-security.alerts-* | WHERE source_ip == ?entity OR dest_ip == ?entity OR source.ip == ?entity OR destination.ip == ?entity OR query == ?entity OR dns.question.name == ?entity OR destination_domain == ?entity OR url.domain == ?entity | SORT @timestamp ASC | KEEP @timestamp, event.kind, event.category, event.action, source_ip, dest_ip, source.ip, destination.ip, query, dns.question.name, destination_domain, url.domain, alert, rule.name, kibana.alert.rule.name, threat.technique.id, threat.technique.name | LIMIT 100",
+      "when_to_use": "Use when explaining evidence or reconstructing attacker activity."
+    },
+    {
+      "name": "cluster_incident_candidates",
+      "type": "esql",
+      "description": "Find likely incident clusters by grouping alerts by source entity, MITRE technique, alert name, and time bucket.",
+      "params": {
+        "lookback_hours": "number"
+      },
+      "esql": "FROM security-alerts, .alerts-security.alerts-* | WHERE @timestamp >= NOW() - ?lookback_hours HOURS | EVAL src = COALESCE(source.ip, source_ip), dst = COALESCE(destination.ip, dest_ip), technique = COALESCE(TO_STRING(threat.technique.id), TO_STRING(kibana.alert.rule.threat.technique.id)), signal = COALESCE(rule.name, kibana.alert.rule.name, alert) | STATS alert_count = COUNT(*), first_seen = MIN(@timestamp), last_seen = MAX(@timestamp), destinations = VALUES(dst), signals = VALUES(signal), techniques = VALUES(technique) BY src | WHERE alert_count >= 2 | SORT alert_count DESC | LIMIT 50",
+      "when_to_use": "Use before writing or updating incidents."
+    },
+    {
+      "name": "mitre_from_elastic_security",
+      "type": "esql",
+      "description": "Retrieve MITRE ATT&CK techniques and tactics directly from Elastic Security alert and rule metadata.",
+      "params": {
+        "entity": "string"
+      },
+      "esql": "FROM .alerts-security.alerts-*, security-alerts | WHERE source.ip == ?entity OR destination.ip == ?entity OR source_ip == ?entity OR dest_ip == ?entity OR dns.question.name == ?entity OR query == ?entity | WHERE threat.technique.id IS NOT NULL OR kibana.alert.rule.threat.technique.id IS NOT NULL | KEEP @timestamp, rule.name, kibana.alert.rule.name, threat.tactic.name, threat.technique.id, threat.technique.name, kibana.alert.rule.threat.tactic.name, kibana.alert.rule.threat.technique.id, kibana.alert.rule.threat.technique.name | LIMIT 100",
+      "when_to_use": "Use before asking Gemini to infer ATT&CK techniques."
+    },
+    {
+      "name": "campaign_memory_lookup",
+      "type": "esql",
+      "description": "Look up campaign memory by IP/domain overlap, MITRE technique overlap, or campaign name.",
+      "params": {
+        "query": "string"
+      },
+      "esql": "FROM blackgate.campaigns, blackgate.mitre_knowledge, blackgate.agent_memory | WHERE TO_STRING(entities.ips) LIKE CONCAT(\"*\", ?query, \"*\") OR TO_STRING(entities.domains) LIKE CONCAT(\"*\", ?query, \"*\") OR TO_STRING(technique.id) == ?query OR TO_STRING(campaign.name) LIKE CONCAT(\"*\", ?query, \"*\") OR TO_STRING(memory.text) LIKE CONCAT(\"*\", ?query, \"*\") | KEEP campaign.id, campaign.name, campaign.confidence, campaign.description, technique.id, technique.name, tactic.name, memory.text, related_incident_ids, detection_notes | LIMIT 50",
+      "when_to_use": "Use when determining whether a new incident belongs to an existing campaign."
+    },
+    {
+      "name": "save_blackgate_investigation",
+      "type": "workflow",
+      "description": "Persist a final investigation report, campaign hypothesis, MITRE mapping, and remediation into Elasticsearch.",
+      "writes_to": [
+        "security-incidents",
+        "blackgate.campaigns",
+        "blackgate.mitre_knowledge",
+        "blackgate.agent_memory"
+      ],
+      "input_schema": {
+        "incident_id": "string",
+        "title": "string",
+        "severity": "low|medium|high|critical",
+        "summary": "string",
+        "timeline": "array",
+        "entities": "object",
+        "mitre": "array",
+        "campaign": "object",
+        "evidence": "array",
+        "recommended_actions": "array",
+        "confidence": "number"
+      },
+      "when_to_use": "Use after the agent has enough evidence to finalize an analyst-ready report."
+    }
+  ]
+}

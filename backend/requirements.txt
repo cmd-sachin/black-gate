@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+elasticsearch
+pydantic
+python-dotenv
+google-genai
+google-adk
+pymongo
+geoip2
+mcpsse-starlette
