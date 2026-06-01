@@ -6,7 +6,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
 // ----------------------------------------------------------------------
 // Navbar

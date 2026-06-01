@@ -205,12 +205,12 @@ def _search_related_elastic_security_alerts(alerts: list[dict[str, Any]], techni
     for term in terms[:20]:
         should.extend(
             [
-                {"term": {"source.ip": term}},
-                {"term": {"destination.ip": term}},
+                {"term": {"source.ip.keyword": term}},
+                {"term": {"destination.ip.keyword": term}},
                 {"term": {"source_ip.keyword": term}},
                 {"term": {"dest_ip.keyword": term}},
-                {"term": {"dns.question.name": term}},
-                {"term": {"url.domain": term}},
+                {"term": {"dns.question.name.keyword": term}},
+                {"term": {"url.domain.keyword": term}},
                 {"term": {"destination_domain.keyword": term}},
                 {"term": {"query.keyword": term}},
             ]

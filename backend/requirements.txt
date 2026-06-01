@@ -7,4 +7,4 @@ google-genai
 google-adk
 pymongo
 geoip2
-mcpsse-starlette
+sse-starlette

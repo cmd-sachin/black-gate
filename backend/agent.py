@@ -69,13 +69,13 @@ else:
 # 🛠️ CUSTOM WORKFLOW TOOL (For Correlation Pipeline)
 # =====================================================================
 
-def trigger_correlation_pipeline() -> str:
+async def trigger_correlation_pipeline() -> str:
     """Trigger the backend pipeline to correlate raw alerts, map them to MITRE ATT&CK, and cluster campaigns. Do this before analyzing incidents."""
     try:
         alerts = fetch_recent_alerts()
         if not alerts:
             return "No alerts found to correlate."
-        incidents = correlate_alerts(alerts)
+        incidents = await correlate_alerts(alerts)
         return f"Successfully correlated {len(incidents)} incidents. Incident, campaign, MITRE, and agent memory are saved in Elasticsearch."
     except Exception as e:
         return f"Error triggering pipeline: {e}"
@@ -133,38 +133,46 @@ def create_soc_agent(elastic_mcp_tools):
     helper_subagent = LlmAgent(
         name="network_simulation_helper",
         model=gemini_model,
-        description="Helper SOC subagent that listens to the simulated network layer, runs IDS ingestion, enriches entities, and reports telemetry status.",
+        description="Helper SOC subagent that listens to the simulated network layer, runs IDS ingestion, and reports telemetry status.",
         instruction="""You are the network simulation helper.
 1. Start with helper_monitor_and_ingest_simulated_network.
-2. Run enrich_recent_investigation_entities to add geo context and entity roles.
-3. Return ingestion counts, enrichment summary, and any telemetry issues.
-4. Keep output brief and operational.""",
-        tools=[helper_monitor_and_ingest_simulated_network, enrich_recent_investigation_entities],
+2. Return ingestion counts and any telemetry issues.
+3. Keep output brief and operational.""",
+        tools=[helper_monitor_and_ingest_simulated_network],
+    )
+
+    threat_intel_agent = LlmAgent(
+        name="threat_intel_specialist",
+        model=gemini_model,
+        description="Specialist agent that enriches incidents with external threat intel, geo-context, and generates campaign hypotheses.",
+        instruction="""You are the threat intel specialist.
+1. Run enrich_recent_investigation_entities to gather geographic and role data for IP addresses.
+2. Run master_threat_intel_hypothesis to search for IOC overlaps and deduce attacker motives.
+3. Consolidate your findings into a clear Threat Intel summary for the master orchestrator.""",
+        tools=[enrich_recent_investigation_entities, master_threat_intel_hypothesis],
     )
 
     return LlmAgent(
         name="soc_orchestrator_master",
         model=gemini_model,
-        description='Master SOC agent with one helper subagent for simulated network monitoring and IDS ingest, plus Elastic Security reasoning and campaign intelligence.',
-        sub_agents=[helper_subagent],
+        description='Master SOC agent with helper subagents for simulated network monitoring and threat intel enrichment.',
+        sub_agents=[helper_subagent, threat_intel_agent],
         instruction='''You are Blackgate, a focused AI SOC analyst.
 
 Use Elastic Security as the security source of truth. Prefer Elastic Security alert fields, ES|QL/search results, and Elasticsearch memory over your own assumptions.
 
 Workflow:
-1. Delegate first to network_simulation_helper to monitor simulated traffic and ingest through Zeek/Suricata.
+1. Delegate to network_simulation_helper to monitor traffic and ingest through Zeek/Suricata.
 2. Run trigger_correlation_pipeline to group incidents/campaigns and classify severity.
 3. Run master_run_security_queries to analyze correlations and security evidence.
-4. Run enrich_recent_investigation_entities and master_threat_intel_hypothesis for attacker-victim country relationship, IOC overlap, and motive hypotheses.
+4. Delegate to threat_intel_specialist to analyze attacker-victim country relationships and motive hypotheses.
 5. Use Elastic MCP tools to retrieve supporting records when needed.
 6. Produce a final report with: timeline, MITRE mapping, campaign grouping, severity summary, security measures, intent hypothesis, and confidence caveats.
 7. Never treat country geolocation alone as proof of attribution.''',
         tools=[
             elastic_mcp_tools,
             trigger_correlation_pipeline,
-            enrich_recent_investigation_entities,
             master_run_security_queries,
-            master_threat_intel_hypothesis,
             run_master_soc_pipeline,
         ],
     )
@@ -227,7 +235,7 @@ def generate_offline_agent_response(query: str, original_error: str) -> str:
 
 async def run_agent(prompt: str | None = None) -> dict:
     """Async entrypoint called by FastAPI. Spins up the MCP servers natively."""
-    print("🚀 Initializing Elastic MCP tools...")
+    print("[START] Initializing Elastic MCP tools...")
     query = prompt or "Analyze the latest network alerts and report any incidents."
     run_id = create_run("Blackgate Master SOC Run", query)
     token = set_current_run(run_id)
@@ -236,7 +244,7 @@ async def run_agent(prompt: str | None = None) -> dict:
     elastic_mcp = McpToolset(connection_params=elastic_params)
     
     try:
-        print("✅ Elastic MCP connected. Starting Blackgate SOC agent...")
+        print("[OK] Elastic MCP connected. Starting Blackgate SOC agent...")
         add_event("run.mcp", "Elastic MCP connected", {"mode": "remote" if (elastic_mcp_url or kibana_url) else "local"})
         
         agent = create_soc_agent(elastic_mcp)
@@ -277,12 +285,12 @@ async def run_agent(prompt: str | None = None) -> dict:
     except Exception as e:
         error_str = str(e)
         fallback_report = generate_offline_agent_response(query, error_str)
-        print(f"⚠️ Exception in agent run, using fallback report: {e}")
+        print(f"[WARN] Exception in agent run, using fallback report: {e}")
         add_event("run.error", "Master SOC run failed, fallback generated", {"error": error_str})
         finish_run(run_id, "completed", {"output": fallback_report})
         return {"run_id": run_id, "output": fallback_report}
         
     finally:
-        print("🧹 Cleaning up Elastic MCP process...")
+        print("[CLEANUP] Cleaning up Elastic MCP process...")
         await elastic_mcp.close()
         reset_current_run(token)

@@ -106,7 +106,9 @@ def _index_suricata_alert(event: dict[str, Any], timestamp_iso: str):
     return doc
 
 
-def run_simulated_ids_pipeline() -> dict[str, Any]:
+import asyncio
+
+async def run_simulated_ids_pipeline() -> dict[str, Any]:
     """
     Helper-subagent tool:
     1) Simulate packet layer from packets.hex -> pcap
@@ -121,8 +123,34 @@ def run_simulated_ids_pipeline() -> dict[str, Any]:
     hex_to_pcap(paths["hex"], paths["pcap"])
     add_event("helper.ids", "Converted packets.hex to simulated pcap", {"pcap_file": paths["pcap"]})
 
+    from elasticsearch import helpers
+
     zeek_count = 0
-    all_docs = []
+    suricata_count = 0
+    
+    chunk_size = 50
+    current_chunk = []
+    
+    async def flush_chunk():
+        if not current_chunk:
+            return
+        
+        try:
+            from .enrichment import enrich_alert_documents
+            enriched = enrich_alert_documents(current_chunk)
+        except Exception as e:
+            print(f"Subagent enrichment failed: {e}")
+            enriched = current_chunk
+            
+        actions = [{"_index": ALERT_INDEX, "_source": d} for d in enriched]
+        try:
+            helpers.bulk(es, actions)
+            await asyncio.sleep(1.0) # Trickle data into Elasticsearch to simulate live traffic
+        except Exception as e:
+            print(f"Bulk indexing failed: {e}")
+            
+        current_chunk.clear()
+
     if os.path.exists(paths["zeek_dns"]):
         with open(paths["zeek_dns"], "r", encoding="utf-8", errors="ignore") as f:
             fields: list[str] = []
@@ -143,12 +171,13 @@ def run_simulated_ids_pipeline() -> dict[str, Any]:
                         timestamp_iso = datetime.fromtimestamp(ts, timezone.utc).isoformat()
                     except Exception:
                         timestamp_iso = datetime.now(timezone.utc).isoformat()
-                        doc = _index_zeek_row(row, timestamp_iso)
-                        if doc:
-                            all_docs.append(doc)
-                    zeek_count += 1
+                    doc = _index_zeek_row(row, timestamp_iso)
+                    if doc:
+                        current_chunk.append(doc)
+                        zeek_count += 1
+                        if len(current_chunk) >= chunk_size:
+                            await flush_chunk()
 
-    suricata_count = 0
     if os.path.exists(paths["suricata_eve"]):
         with open(paths["suricata_eve"], "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
@@ -168,19 +197,13 @@ def run_simulated_ids_pipeline() -> dict[str, Any]:
                     timestamp_iso = datetime.now(timezone.utc).isoformat()
                 doc = _index_suricata_alert(event, timestamp_iso)
                 if doc:
-                    all_docs.append(doc)
-                suricata_count += 1
-
-    if all_docs:
-        add_event("helper.enrich", "Enriching telemetry batch with GeoIP and roles", {"batch_size": len(all_docs)})
-        try:
-            from .enrichment import enrich_alert_documents
-            all_docs = enrich_alert_documents(all_docs)
-        except Exception as e:
-            print(f"Subagent enrichment failed: {e}")
-            
-        for doc in all_docs:
-            es.index(index=ALERT_INDEX, document=doc)
+                    current_chunk.append(doc)
+                    suricata_count += 1
+                    if len(current_chunk) >= chunk_size:
+                        await flush_chunk()
+                        
+    # Flush any remaining docs
+    await flush_chunk()
 
     add_event(
         "helper.ids",
@@ -202,7 +225,7 @@ def run_security_correlation_queries(lookback_size: int = 500) -> dict[str, Any]
         index=ALERT_INDEX,
         size=0,
         aggs={
-            "by_source_ip": {"terms": {"field": "source.ip", "size": 10}},
+            "by_source_ip": {"terms": {"field": "source.ip.keyword", "size": 10}},
             "by_signature": {"terms": {"field": "rule.name.keyword", "size": 10}},
             "by_destination_domain": {"terms": {"field": "url.domain.keyword", "size": 10}},
             "by_severity": {"terms": {"field": "event.severity", "size": 10}},
@@ -264,8 +287,8 @@ def run_threat_intel_and_hypothesis() -> dict[str, Any]:
     return hypothesis
 
 
-def run_master_soc_pipeline(max_llm_incidents: int = 1) -> dict[str, Any]:
-    incidents = correlate_alerts(fetch_recent_alerts(limit=300), max_llm_incidents=max_llm_incidents)
+async def run_master_soc_pipeline(max_llm_incidents: int = 1) -> dict[str, Any]:
+    incidents = await correlate_alerts(fetch_recent_alerts(limit=300), max_llm_incidents=max_llm_incidents)
     enrich = enrich_entities_from_alerts(fetch_recent_alerts(limit=200))
     corr = run_security_correlation_queries(lookback_size=500)
     intel = run_threat_intel_and_hypothesis()

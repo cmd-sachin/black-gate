@@ -18,7 +18,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Any, Optional
@@ -382,18 +382,18 @@ async def trigger_agent(req: AgentRequest | None = None, prompt: str | None = No
 
 
 @app.post("/soc/simulate/run")
-def run_simulated_soc(req: SimulatedRunRequest | None = None):
+async def run_simulated_soc(req: SimulatedRunRequest | None = None):
     """Run the full deterministic backend SOC simulation pipeline for transparent frontend playback."""
     try:
         helper = run_simulated_ids_pipeline()
-        master = run_master_soc_pipeline(max_llm_incidents=1)
+        master = await run_master_soc_pipeline(max_llm_incidents=1)
         return {"status": "ok", "helper": helper, "master": master, "prompt": req.prompt if req else ""}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/soc/simulate/start")
-def start_simulated_soc(req: SimulatedRunRequest | None = None):
+async def start_simulated_soc(background_tasks: BackgroundTasks, req: SimulatedRunRequest | None = None):
     """Start simulation in background and return run_id immediately for live dashboard polling."""
     from services.run_trace import create_run, finish_run, set_current_run, reset_current_run, add_event
 
@@ -401,15 +401,38 @@ def start_simulated_soc(req: SimulatedRunRequest | None = None):
     run_id = create_run("Blackgate Simulated SOC Run", prompt)
     _active_runs[run_id] = {"run_id": run_id, "status": "running", "started_at": datetime.now(timezone.utc).isoformat()}
 
-    def worker():
+    async def worker():
+        import asyncio
         token = set_current_run(run_id)
         try:
             add_event("run.start", "Simulation run started", {"prompt": prompt})
-            helper = run_simulated_ids_pipeline()
-            master = run_master_soc_pipeline(max_llm_incidents=1)
-            add_event("run.complete", "Simulation run finished", {"incident_count": master.get("incident_count", 0)})
+            
+            # Start ingestion in the background
+            ingestion_task = asyncio.create_task(run_simulated_ids_pipeline())
+            
+            master_results = []
+            
+            # Run the agent in a loop while ingestion is running
+            while not ingestion_task.done():
+                try:
+                    master = await run_master_soc_pipeline(max_llm_incidents=0) # Only deterministic clustering during fast-loop
+                    master_results.append(master)
+                except Exception as e:
+                    print(f"[WARN] Agent loop iteration failed: {e}")
+                await asyncio.sleep(6.0)
+                
+            # Wait for ingestion to fully finish
+            helper = await ingestion_task
+            
+            # Final sweep with full LLM enrichment
+            master = await run_master_soc_pipeline(max_llm_incidents=1)
+            master_results.append(master)
+            
+            total_incidents = sum(m.get('incident_count', 0) for m in master_results)
+            
+            add_event("run.complete", "Simulation run finished", {"incident_count": total_incidents})
             finish_run(run_id, "completed", {"helper": helper, "master": master})
-            _active_runs[run_id] = {"run_id": run_id, "status": "completed", "output": f"{master.get('incident_count', 0)} incidents correlated"}
+            _active_runs[run_id] = {"run_id": run_id, "status": "completed", "output": f"{total_incidents} incidents correlated"}
         except Exception as exc:
             add_event("run.error", "Simulation run failed", {"error": str(exc)})
             finish_run(run_id, "failed", {"error": str(exc)})
@@ -417,8 +440,7 @@ def start_simulated_soc(req: SimulatedRunRequest | None = None):
         finally:
             reset_current_run(token)
 
-    thread = threading.Thread(target=worker, daemon=True)
-    thread.start()
+    background_tasks.add_task(worker)
     return {"status": "ok", "run_id": run_id}
 
 

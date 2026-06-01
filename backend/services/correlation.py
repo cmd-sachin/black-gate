@@ -46,7 +46,7 @@ class IncidentIntelligence(BaseModel):
 # 🧠 COGNITIVE ENRICHMENT LOOP
 # =====================================================================
 
-def fetch_llm_intelligence(alerts: List[Dict], countries: List[str], base_mitre: List[Dict], campaign_id: str) -> Dict:
+async def fetch_llm_intelligence(alerts: List[Dict], countries: List[str], base_mitre: List[Dict], campaign_id: str) -> Dict:
     """
     Calls Gemini to analyze the telemetry stream, extract high-level patterns,
     identify advanced MITRE techniques, and summarize the attack.
@@ -98,7 +98,7 @@ Analyze this security telemetry payload and perform structured forensic enrichme
 """
 
         # Call Gemini using Structured Outputs
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -114,7 +114,7 @@ Analyze this security telemetry payload and perform structured forensic enrichme
         return fallback
 
     except Exception as e:
-        print(f"⚠️ Gemini Enrichment fallback triggered (Rate limit or Connection error): {e}")
+        print(f"[WARN] Gemini Enrichment fallback triggered (Rate limit or Connection error): {e}")
         return fallback
 
 # =====================================================================
@@ -183,7 +183,7 @@ def merge_mitre_techniques(base_list: List[Dict], advanced_list: List[Dict]) -> 
         key=lambda item: (-float(item.get("confidence", 0)), item.get("technique_id", "")),
     )
 
-def correlate_alerts(alerts, max_llm_incidents: int = 1):
+async def correlate_alerts(alerts, max_llm_incidents: int = 1):
     grouped = defaultdict(list)
 
     # Group by Source IP
@@ -230,8 +230,8 @@ def correlate_alerts(alerts, max_llm_incidents: int = 1):
 
         # 3. Cognitive Enrichment Layer (AI Agent Brain)
         if index < max_llm_incidents:
-            print(f"🧠 Querying Gemini for Incident & Campaign Intelligence ({source_ip})...")
-            llm_intel = fetch_llm_intelligence(related_alerts, countries, mitre_list, campaign_info["cluster_id"])
+            print(f"[AI] Querying Gemini for Incident & Campaign Intelligence ({source_ip})...")
+            llm_intel = await fetch_llm_intelligence(related_alerts, countries, mitre_list, campaign_info["cluster_id"])
         else:
             llm_intel = {
                 "analyst_summary": f"Deterministic correlation for {source_ip}.",
@@ -279,13 +279,13 @@ def correlate_alerts(alerts, max_llm_incidents: int = 1):
         # 5. Gemini Validation Gate
         try:
             from .gemini_validator import validate_incident
-            print(f"🕵️‍♂️ Validating Incident {incident['incident_id']} via Gemini...")
-            validation = validate_incident(incident)
+            print(f"[AI] Validating Incident {incident['incident_id']} via Gemini...")
+            validation = await validate_incident(incident)
             incident["validation"] = validation
             if validation.get("revised_severity"):
                 incident["risk"] = validation["revised_severity"]
         except Exception as e:
-            print(f"⚠️ Validation failed for {incident['incident_id']}: {e}")
+            print(f"[WARN] Validation failed for {incident['incident_id']}: {e}")
             incident["validation"] = {"is_valid": True, "verdict": "inconclusive", "reasoning": "Validation failed"}
 
         # Save to Elastic Search (For time-series metrics/SIEM feeds)

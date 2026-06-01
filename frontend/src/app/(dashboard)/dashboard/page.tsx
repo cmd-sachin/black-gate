@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
 export default function DashboardOverview() {
   const [stats, setStats] = useState<any>(null);
@@ -105,127 +105,6 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Agent Orchestration Panel */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-r from-cyan-950/40 to-amber-950/40 border border-cyan-500/20 rounded-2xl p-6 backdrop-blur-sm"
-      >
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Zap className="w-5 h-5 text-amber-400" />
-              Agent Orchestration
-            </h2>
-            <p className="text-sm text-slate-400 mt-1">
-              Trigger the full SOC pipeline and watch the agent work in
-              real‑time.
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {simStatus.active ? (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-slate-300">
-                  Run{" "}
-                  <span className="font-mono text-cyan-400">
-                    {simStatus.runId?.slice(0, 8)}
-                  </span>
-                </span>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    simStatus.status === "completed"
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      : simStatus.status === "error"
-                      ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                      : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 animate-pulse"
-                  }`}
-                >
-                  {simStatus.status === "completed"
-                    ? "Completed"
-                    : simStatus.status === "error"
-                    ? "Error"
-                    : "Running..."}
-                </span>
-              </div>
-            ) : (
-              <button
-                onClick={runSimulation}
-                disabled={isLoading}
-                className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-amber-600 text-white font-semibold rounded-xl hover:shadow-cyan-500/30 hover:scale-105 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Launching...
-                  </>
-                ) : (
-                  <>
-                    <Terminal className="w-4 h-4" /> Run Simulation
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Pipeline Progress Visualization */}
-        {simStatus.active && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            className="mt-6 space-y-4"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              {phases.map((phase, idx) => {
-                const isCompleted = simStatus.status === "completed" || idx < currentPhaseIndex;
-                const isCurrent = idx === currentPhaseIndex && simStatus.status !== "completed" && simStatus.status !== "error";
-                const isError = simStatus.status === "error" && idx === currentPhaseIndex + 1;
-                return (
-                  <div key={phase} className="flex items-center gap-2">
-                    <div
-                      className={`w-4 h-4 rounded-full ${
-                        isCompleted
-                          ? "bg-emerald-500 shadow-[0_0_8px_#10b981]"
-                          : isCurrent
-                          ? "bg-cyan-500 shadow-[0_0_8px_#06b6d4] animate-pulse"
-                          : isError
-                          ? "bg-red-500 shadow-[0_0_8px_#ef4444]"
-                          : "bg-slate-700"
-                      }`}
-                    />
-                    <span
-                      className={`text-xs ${
-                        isCompleted || isCurrent ? "text-white" : "text-slate-500"
-                      }`}
-                    >
-                      {phase}
-                    </span>
-                    {idx < phases.length - 1 && (
-                      <span className="text-slate-600 mx-1">→</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Final Output */}
-            {simStatus.status === "completed" && simStatus.output && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-black/30 border border-white/10 rounded-xl p-4 font-mono text-sm text-emerald-400 max-h-40 overflow-y-auto"
-              >
-                {simStatus.output}
-              </motion.div>
-            )}
-
-            {simStatus.error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-sm">
-                Simulation error: {simStatus.error}
-              </div>
-            )}
-          </motion.div>
-        )}
-      </motion.div>
 
       {/* KPI Cards and rest of dashboard ... (keep existing code) */}
       <div className="flex items-center justify-between">
@@ -240,42 +119,57 @@ export default function DashboardOverview() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-          <div className="flex items-center gap-3 text-slate-400 mb-2">
-            <ShieldAlert className="w-5 h-5 text-rose-400" />
-            <h3 className="text-sm font-medium">Total Incidents</h3>
+        <div className="group relative bg-[#050914]/80 backdrop-blur-2xl border border-slate-800/80 rounded-2xl p-6 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(244,63,94,0.3)] hover:border-rose-500/30 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center gap-3 text-slate-400 mb-4 relative z-10">
+            <div className="p-2 bg-rose-500/10 rounded-lg">
+              <ShieldAlert className="w-5 h-5 text-rose-400" />
+            </div>
+            <h3 className="text-sm font-semibold tracking-wide">Total Incidents</h3>
           </div>
-          <p className="text-3xl font-light text-white">
+          <p className="text-4xl font-black text-white tracking-tight relative z-10 group-hover:text-rose-50 transition-colors">
             {isLoading ? "..." : stats?.total_incidents.toLocaleString()}
           </p>
         </div>
-        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-          <div className="flex items-center gap-3 text-slate-400 mb-2">
-            <Target className="w-5 h-5 text-amber-400" />
-            <h3 className="text-sm font-medium">Active Campaigns</h3>
+
+        <div className="group relative bg-[#050914]/80 backdrop-blur-2xl border border-slate-800/80 rounded-2xl p-6 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(245,158,11,0.3)] hover:border-amber-500/30 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center gap-3 text-slate-400 mb-4 relative z-10">
+            <div className="p-2 bg-amber-500/10 rounded-lg">
+              <Target className="w-5 h-5 text-amber-400" />
+            </div>
+            <h3 className="text-sm font-semibold tracking-wide">Active Campaigns</h3>
           </div>
-          <p className="text-3xl font-light text-white">
+          <p className="text-4xl font-black text-white tracking-tight relative z-10 group-hover:text-amber-50 transition-colors">
             {isLoading ? "..." : stats?.total_campaigns.toLocaleString()}
           </p>
         </div>
-        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-          <div className="flex items-center gap-3 text-slate-400 mb-2">
-            <Activity className="w-5 h-5 text-cyan-400" />
-            <h3 className="text-sm font-medium">Raw Alerts (24h)</h3>
+
+        <div className="group relative bg-[#050914]/80 backdrop-blur-2xl border border-slate-800/80 rounded-2xl p-6 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(34,211,238,0.3)] hover:border-cyan-500/30 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center gap-3 text-slate-400 mb-4 relative z-10">
+            <div className="p-2 bg-cyan-500/10 rounded-lg">
+              <Activity className="w-5 h-5 text-cyan-400" />
+            </div>
+            <h3 className="text-sm font-semibold tracking-wide">Raw Alerts (24h)</h3>
           </div>
-          <p className="text-3xl font-light text-white">
+          <p className="text-4xl font-black text-white tracking-tight relative z-10 group-hover:text-cyan-50 transition-colors">
             {isLoading ? "..." : stats?.total_alerts.toLocaleString()}
           </p>
         </div>
-        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-          <div className="flex items-center gap-3 text-slate-400 mb-2">
-            <AlertTriangle className="w-5 h-5 text-purple-400" />
-            <h3 className="text-sm font-medium">Critical / High</h3>
+
+        <div className="group relative bg-[#050914]/80 backdrop-blur-2xl border border-slate-800/80 rounded-2xl p-6 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(168,85,247,0.3)] hover:border-purple-500/30 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-center gap-3 text-slate-400 mb-4 relative z-10">
+            <div className="p-2 bg-purple-500/10 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-purple-400" />
+            </div>
+            <h3 className="text-sm font-semibold tracking-wide">Critical / High</h3>
           </div>
-          <p className="text-3xl font-light text-white flex items-baseline gap-2">
+          <p className="text-4xl font-black text-white tracking-tight relative z-10 flex items-baseline gap-2 group-hover:text-purple-50 transition-colors">
             {isLoading ? "..." : (stats?.incident_severities?.critical || 0)}
-            <span className="text-xl text-slate-500">/</span>
-            <span className="text-2xl text-slate-300">
+            <span className="text-xl text-slate-600 font-normal">/</span>
+            <span className="text-2xl text-slate-400 font-semibold group-hover:text-slate-300 transition-colors">
               {isLoading ? "..." : (stats?.incident_severities?.high || 0)}
             </span>
           </p>
@@ -284,9 +178,9 @@ export default function DashboardOverview() {
 
       {/* Map and Alerts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-xl overflow-hidden flex flex-col h-[500px]">
-          <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">
+        <div className="lg:col-span-2 bg-[#050914]/80 backdrop-blur-2xl border border-slate-800/80 rounded-2xl overflow-hidden flex flex-col h-[500px] shadow-lg">
+          <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-900/50 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-white tracking-wide uppercase">
               Global Threat Origin
             </h2>
           </div>
@@ -294,9 +188,9 @@ export default function DashboardOverview() {
             <ThreatMap />
           </div>
         </div>
-        <div className="bg-white/5 border border-white/10 rounded-xl flex flex-col h-[500px]">
-          <div className="px-5 py-4 border-b border-white/10">
-            <h2 className="text-sm font-semibold text-white">
+        <div className="bg-[#050914]/80 backdrop-blur-2xl border border-slate-800/80 rounded-2xl flex flex-col h-[500px] shadow-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-900/50">
+            <h2 className="text-sm font-bold text-white tracking-wide uppercase">
               Live Telemetry Feed
             </h2>
           </div>

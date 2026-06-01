@@ -36,7 +36,6 @@ RUN cd backend && npm install --omit=dev --ignore-scripts
 
 # Copy the application code
 COPY backend/ ./backend/
-COPY convert_hex_to_pcap.py .
 
 # Copy default configurations if needed
 RUN mkdir -p /app/zeek_logs /app/suricata_logs

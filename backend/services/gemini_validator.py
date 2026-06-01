@@ -13,7 +13,7 @@ from google.genai import types
 try:
     client = genai.Client()
 except Exception as e:
-    print(f"⚠️ Gemini validator client init failed: {e}")
+    print(f"[WARN] Gemini validator client init failed: {e}")
     client = None
 
 
@@ -37,7 +37,7 @@ _FALLBACK = {
 }
 
 
-def validate_incident(incident: dict) -> dict:
+async def validate_incident(incident: dict) -> dict:
     """
     Ask Gemini to validate or reject an incident.
     Soft gate: rejected incidents are saved but marked with verdict.
@@ -100,7 +100,7 @@ Review this incident and determine whether it's a genuine security threat or noi
 - Multiple low-confidence heuristic-only MITRE mappings suggest noise
 - Consider whether source/destination IPs are private vs public"""
 
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -116,14 +116,14 @@ Review this incident and determine whether it's a genuine security threat or noi
             return result
 
     except Exception as e:
-        print(f"⚠️ Gemini validation fallback: {e}")
+        print(f"[WARN] Gemini validation fallback: {e}")
 
     fb = dict(_FALLBACK)
     fb["revised_severity"] = incident.get("risk", "medium")
     return fb
 
 
-def validate_campaign(campaign: dict, related_incidents: list[dict]) -> dict:
+async def validate_campaign(campaign: dict, related_incidents: list[dict]) -> dict:
     """Validate whether a campaign cluster is coherent or coincidental."""
     if not client or not os.getenv("GEMINI_API_KEY"):
         return dict(_FALLBACK)
@@ -148,7 +148,7 @@ def validate_campaign(campaign: dict, related_incidents: list[dict]) -> dict:
 
 Determine if the incidents share tactical, infrastructural, or temporal overlap to constitute a real campaign."""
 
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -164,6 +164,6 @@ Determine if the incidents share tactical, infrastructural, or temporal overlap 
             return result
 
     except Exception as e:
-        print(f"⚠️ Campaign validation fallback: {e}")
+        print(f"[WARN] Campaign validation fallback: {e}")
 
     return dict(_FALLBACK)

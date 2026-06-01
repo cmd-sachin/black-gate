@@ -131,13 +131,13 @@ def enrich_entities(ips=None, domains=None, alerts=None):
     external_countries = set()
 
     if not os.path.exists(MMDB_PATH):
-        print(f"⚠️ GeoLite2 MMDB not found at: {MMDB_PATH}")
+        print(f"[WARN] GeoLite2 MMDB not found at: {MMDB_PATH}")
         reader = None
     else:
         try:
             reader = geoip2.database.Reader(MMDB_PATH)
         except Exception as e:
-            print(f"⚠️ Failed to load GeoIP database: {e}")
+            print(f"[WARN] Failed to load GeoIP database: {e}")
             reader = None
 
     try:
@@ -253,7 +253,7 @@ def enrich_alert_documents(docs: list[dict]) -> list[dict]:
                 ip_geo_cache[ip] = _safe_city_lookup(reader, ip)
             reader.close()
         except Exception as e:
-            print(f"⚠️ Batch GeoIP enrichment failed: {e}")
+            print(f"[WARN] Batch GeoIP enrichment failed: {e}")
 
     # Attach geo to each document
     for doc in docs:

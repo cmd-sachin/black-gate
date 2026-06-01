@@ -5,7 +5,7 @@ import Map, { Marker, Popup, NavigationControl, ScaleControl } from "react-map-g
 import type { MapRef, ViewState, ViewStateChangeEvent, MarkerEvent } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
 // Approximate country centroids for geo-placement on the map
 const COUNTRY_COORDS: Record<string, [number, number]> = {
