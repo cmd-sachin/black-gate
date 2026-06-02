@@ -85,7 +85,7 @@ function getSeverityColor(severities: Record<string, number>): string {
   return "#3b82f6";
 }
 
-export default function ThreatMap() {
+export default function ThreatMap({ viewMode = "map" }: { viewMode?: "map" | "table" }) {
   const mapRef = useRef<MapRef>(null);
   const [viewState, setViewState] = useState<Partial<ViewState>>({
     longitude: 20,
@@ -121,6 +121,9 @@ export default function ThreatMap() {
             };
           })
           .filter(Boolean) as MapMarker[];
+        
+        // Sort mapped by incident count for table view
+        mapped.sort((a, b) => b.incidentCount - a.incidentCount);
         setMarkers(mapped);
         setIsLoading(false);
       })
@@ -140,9 +143,61 @@ export default function ThreatMap() {
     });
   }, []);
 
+  if (viewMode === "table") {
+    return (
+      <div className="w-full h-full bg-[#020617] border border-white/10 rounded-xl overflow-hidden flex flex-col">
+        {isLoading ? (
+           <div className="flex-1 flex items-center justify-center">
+             <span className="text-sm text-slate-500 animate-pulse font-mono">Loading geographic origin data...</span>
+           </div>
+        ) : markers.length === 0 ? (
+           <div className="flex-1 flex items-center justify-center">
+             <span className="text-sm text-slate-500 font-mono">No geo data yet.</span>
+           </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#0F172A] sticky top-0 border-b border-slate-800 shadow-sm z-10">
+                <tr>
+                  <th className="px-4 py-2 font-semibold text-slate-400">Country Origin</th>
+                  <th className="px-4 py-2 font-semibold text-slate-400">Incidents</th>
+                  <th className="px-4 py-2 font-semibold text-slate-400">Alert Volume</th>
+                  <th className="px-4 py-2 font-semibold text-slate-400">Severity Breakdown</th>
+                  <th className="px-4 py-2 font-semibold text-slate-400">Last Active</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {markers.map((m) => (
+                  <tr key={m.id} className="hover:bg-slate-800/20 transition-colors">
+                    <td className="px-4 py-2.5 font-bold text-slate-300 flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
+                      {m.country}
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-cyan-400">{m.incidentCount}</td>
+                    <td className="px-4 py-2.5 font-mono text-slate-400">{m.totalAlerts.toLocaleString()}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex gap-1.5 flex-wrap">
+                        {m.severities.critical > 0 && <span className="text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1 rounded uppercase font-bold">Crit: {m.severities.critical}</span>}
+                        {m.severities.high > 0 && <span className="text-[10px] bg-orange-500/10 text-orange-400 border border-orange-500/20 px-1 rounded uppercase font-bold">High: {m.severities.high}</span>}
+                        {m.severities.medium > 0 && <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 rounded uppercase font-bold">Med: {m.severities.medium}</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-[10px] font-mono text-slate-500">
+                      {m.lastSeen ? new Date(m.lastSeen).toLocaleString([], {hour12: false}) : "Unknown"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (!token) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 rounded-xl p-6">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-[#020617] rounded-xl p-6 border border-white/10">
         <div className="text-amber-400 mb-2">⚠️ Mapbox token missing</div>
         <p className="text-slate-400 text-sm text-center">
           Add <code className="bg-slate-800 px-1 rounded">NEXT_PUBLIC_MAPBOX_TOKEN</code> to your .env.local
@@ -254,22 +309,18 @@ export default function ThreatMap() {
       {/* Loading overlay */}
       {isLoading && (
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-20">
-          <span className="text-sm text-slate-300 animate-pulse">Loading threat origins from Elasticsearch…</span>
+          <span className="text-sm text-slate-300 animate-pulse font-mono">Loading threat origins from Elasticsearch…</span>
         </div>
       )}
 
       {/* Empty state */}
       {!isLoading && markers.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <span className="text-sm text-slate-500 bg-black/50 px-4 py-2 rounded-lg">
+          <span className="text-sm text-slate-500 bg-black/50 px-4 py-2 rounded-lg font-mono">
             No geo data yet — run a simulation first
           </span>
         </div>
       )}
-
-      <div className="absolute bottom-2 left-2 text-xs text-white/50 bg-black/40 px-2 py-1 rounded z-10 pointer-events-none">
-        © Mapbox © OpenStreetMap
-      </div>
     </div>
   );
 }
