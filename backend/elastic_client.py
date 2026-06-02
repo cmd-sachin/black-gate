@@ -106,4 +106,24 @@ INCIDENT_INDEX = "security-incidents"
 MEMORY_INDEX = "agent-memory"
 CAMPAIGN_INDEX = "blackgate.campaigns"
 MITRE_KNOWLEDGE_INDEX = "blackgate.mitre_knowledge"
-AGENT_MEMORY_INDEX = "blackgate.agent_memory"
+AGENT_MEMORY_INDEX = "campaigniq.agent_memory"
+
+def write_organizational_memory(context: str, category: str, content: str) -> dict:
+    """
+    Writes findings, analyst notes, or remediation outcomes into Elasticsearch
+    to build the organizational security memory for CampaignIQ.
+    """
+    import datetime
+    import uuid
+    doc_id = uuid.uuid4().hex
+    document = {
+        "context": context,
+        "category": category,
+        "content": content,
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }
+    try:
+        res = es.index(index=AGENT_MEMORY_INDEX, id=doc_id, document=document)
+        return {"status": "success", "id": doc_id, "result": res.get("result")}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

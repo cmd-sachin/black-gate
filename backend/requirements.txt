@@ -5,6 +5,7 @@ pydantic
 python-dotenv
 google-genai
 google-adk
+mcp
 pymongo
 geoip2
 sse-starlette

@@ -124,57 +124,100 @@ def master_threat_intel_hypothesis() -> dict:
     """Master tool: infer attacker-victim relationship, IOC linkage, and intent hypothesis."""
     return run_threat_intel_and_hypothesis()
 
-# =====================================================================
-# 👑 AGENT DEFINITION
-# =====================================================================
+from elastic_client import write_organizational_memory
+
+def save_to_memory(context: str, category: str, content: str) -> dict:
+    """Helper tool for agents to write findings back into Elasticsearch organizational memory."""
+    return write_organizational_memory(context, category, content)
 
 def create_soc_agent(elastic_mcp_tools):
     gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    helper_subagent = LlmAgent(
-        name="network_simulation_helper",
+    
+    # 1. Investigation Agent
+    investigation_agent = LlmAgent(
+        name="investigation_agent",
         model=gemini_model,
-        description="Helper SOC subagent that listens to the simulated network layer, runs IDS ingestion, and reports telemetry status.",
-        instruction="""You are the network simulation helper.
-1. Start with helper_monitor_and_ingest_simulated_network.
-2. Return ingestion counts and any telemetry issues.
-3. Keep output brief and operational.""",
-        tools=[helper_monitor_and_ingest_simulated_network],
+        description="Gathers evidence, historical incidents, and relevant context from Elasticsearch for a new security event.",
+        instruction="""You are the CampaignIQ Investigation Agent.
+1. Use Elastic MCP tools to retrieve raw logs, alerts, and historical incidents related to the current event.
+2. Gather context on affected assets and users.
+3. Summarize the timeline of events and initial evidence.""",
+        tools=[elastic_mcp_tools, helper_monitor_and_ingest_simulated_network],
     )
 
+    # 2. Threat Intelligence Agent
     threat_intel_agent = LlmAgent(
-        name="threat_intel_specialist",
+        name="threat_intelligence_agent",
         model=gemini_model,
-        description="Specialist agent that enriches incidents with external threat intel, geo-context, and generates campaign hypotheses.",
-        instruction="""You are the threat intel specialist.
-1. Run enrich_recent_investigation_entities to gather geographic and role data for IP addresses.
-2. Run master_threat_intel_hypothesis to search for IOC overlaps and deduce attacker motives.
-3. Consolidate your findings into a clear Threat Intel summary for the master orchestrator.""",
+        description="Enriches indicators using internal and external intelligence sources.",
+        instruction="""You are the CampaignIQ Threat Intelligence Agent.
+1. Run enrich_recent_investigation_entities to gather geographic and role data for IPs.
+2. Run master_threat_intel_hypothesis to search for IOC overlaps.
+3. Analyze attacker motives and external threat intelligence profiles.""",
         tools=[enrich_recent_investigation_entities, master_threat_intel_hypothesis],
     )
 
-    return LlmAgent(
-        name="soc_orchestrator_master",
+    # 3. Campaign Correlation Agent
+    correlation_agent = LlmAgent(
+        name="campaign_correlation_agent",
         model=gemini_model,
-        description='Master SOC agent with helper subagents for simulated network monitoring and threat intel enrichment.',
-        sub_agents=[helper_subagent, threat_intel_agent],
-        instruction='''You are Blackgate, a focused AI SOC analyst.
+        description="Identifies relationships between incidents and clusters them into potential campaigns.",
+        instruction="""You are the CampaignIQ Campaign Correlation Agent.
+1. Run trigger_correlation_pipeline to map alerts to MITRE ATT&CK.
+2. Run master_run_security_queries to analyze correlations and clustering.
+3. Determine if multiple isolated incidents belong to a larger coordinated attack campaign.""",
+        tools=[trigger_correlation_pipeline, master_run_security_queries],
+    )
 
-Use Elastic Security as the security source of truth. Prefer Elastic Security alert fields, ES|QL/search results, and Elasticsearch memory over your own assumptions.
+    # 4. Risk Assessment Agent
+    risk_agent = LlmAgent(
+        name="risk_assessment_agent",
+        model=gemini_model,
+        description="Evaluates the potential business impact based on asset criticality, exposure, and threat severity.",
+        instruction="""You are the CampaignIQ Risk Assessment Agent.
+1. Evaluate the blast radius of the correlated campaigns.
+2. Assess business impact based on affected user roles, host criticality, and exposed data.
+3. Assign a definitive Severity (Critical, High, Medium, Low).""",
+        tools=[],
+    )
+
+    # 5. Recommendation Agent
+    recommendation_agent = LlmAgent(
+        name="recommendation_agent",
+        model=gemini_model,
+        description="Generates actionable remediation guidance, executive summaries, and response strategies, and writes them to memory.",
+        instruction="""You are the CampaignIQ Recommendation Agent.
+1. Generate specific, actionable remediation steps (e.g., firewall blocks, EDR isolation).
+2. Generate an executive summary of the entire campaign.
+3. MANDATORY: Use the save_to_memory tool to record your mitigation outcome and analyst notes back into Elasticsearch for future reference.""",
+        tools=[save_to_memory],
+    )
+
+    # Master Orchestrator
+    return LlmAgent(
+        name="campaigniq_orchestrator",
+        model=gemini_model,
+        description='Master CampaignIQ orchestrator that coordinates the 5 specialized sub-agents.',
+        sub_agents=[
+            investigation_agent,
+            threat_intel_agent,
+            correlation_agent,
+            risk_agent,
+            recommendation_agent
+        ],
+        instruction='''You are CampaignIQ, an AI-powered security intelligence platform.
+Instead of analyzing raw logs directly, you leverage Elasticsearch as your centralized memory layer and coordinate 5 specialized agents.
 
 Workflow:
-1. Delegate to network_simulation_helper to monitor traffic and ingest through Zeek/Suricata.
-2. Run trigger_correlation_pipeline to group incidents/campaigns and classify severity.
-3. Run master_run_security_queries to analyze correlations and security evidence.
-4. Delegate to threat_intel_specialist to analyze attacker-victim country relationships and motive hypotheses.
-5. Use Elastic MCP tools to retrieve supporting records when needed.
-6. Produce a final report with: timeline, MITRE mapping, campaign grouping, severity summary, security measures, intent hypothesis, and confidence caveats.
-7. Never treat country geolocation alone as proof of attribution.''',
-        tools=[
-            elastic_mcp_tools,
-            trigger_correlation_pipeline,
-            master_run_security_queries,
-            run_master_soc_pipeline,
-        ],
+1. Delegate to investigation_agent to gather initial facts.
+2. Delegate to correlation_agent to cluster incidents into campaigns.
+3. Delegate to threat_intelligence_agent to enrich IOCs and attacker motives.
+4. Delegate to risk_assessment_agent to evaluate business impact.
+5. Delegate to recommendation_agent to generate remediation steps and save the findings to Organizational Memory.
+6. Produce a final, unified campaign narrative combining all sub-agent insights.
+
+Always refer to yourself as CampaignIQ.''',
+        tools=[run_master_soc_pipeline],
     )
 
 # =====================================================================

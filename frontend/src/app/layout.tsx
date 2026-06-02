@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: "Blackgate SOC Console",
-  description: "Agentic SOC dashboard for telemetry correlation and incident reasoning.",
+  title: "CampaignIQ SOC Console",
+  description: "Advanced AI-powered threat hunting and campaign analysis.",
 };
 
 export default function RootLayout({

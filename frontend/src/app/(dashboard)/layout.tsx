@@ -37,13 +37,13 @@ export default function DashboardLayout({
           <div className="absolute inset-0 bg-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
           <Image
             src="/blackgate-logo.jpeg"
-            alt="Blackgate"
-            width={34}
-            height={34}
-            className="rounded-lg shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+            alt="CampaignIQ"
+            width={32}
+            height={32}
+            className="rounded-lg shadow-sm"
           />
-          <span className="text-white font-bold text-lg tracking-wide uppercase">
-            Blackgate
+          <span className="text-white font-bold text-lg tracking-tight">
+            CampaignIQ
           </span>
         </Link>
 

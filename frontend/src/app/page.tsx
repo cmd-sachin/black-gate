@@ -17,12 +17,12 @@ const Navbar = () => (
       <div className="flex items-center gap-3">
         <Image
           src="/blackgate-logo.jpeg"
-          alt="Blackgate"
+          alt="CampaignIQ"
           width={32}
           height={32}
           className="rounded"
         />
-        <span className="text-white font-bold text-lg tracking-tight">Blackgate</span>
+        <span className="text-white font-bold text-lg tracking-tight">CampaignIQ</span>
       </div>
       <div className="hidden md:flex items-center gap-6 text-sm text-slate-400">
         <Link href="#" className="hover:text-white transition-colors">Product</Link>
@@ -167,8 +167,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Why Blackgate */}
-      <section className="px-6 py-20">
+      {/* Why CampaignIQ */}
+      <section id="features" className="py-24 px-6 bg-[#050914] relative z-10">
         <div className="max-w-5xl mx-auto text-center">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -177,7 +177,12 @@ export default function Home() {
             transition={{ duration: 0.6 }}
             className="text-3xl md:text-4xl font-bold text-white"
           >
-            Why Blackgate
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Why CampaignIQ?</h2>
+              <p className="text-slate-400 max-w-2xl mx-auto">
+                Traditional SIEMs generate noise. CampaignIQ utilizes a 5-Agent Architecture to provide automated investigation, context, clustering, and decision support at machine speed.
+              </p>
+            </div>
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
             {[
@@ -403,7 +408,10 @@ export default function Home() {
             <span>and</span>
             <Image src="/google-cloud-logo.svg" alt="Google Cloud" width={80} height={24} />
           </div>
-          <p className="text-xs text-slate-500 mt-4">Blackgate – Turning raw logs into intelligence</p>
+          <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-10">
+            CampaignIQ correlates telemetry across layers, mapping disparate network signals into actionable MITRE ATT&CK campaigns.
+          </p>
+          <p className="text-xs text-slate-500 mt-4">CampaignIQ – Turning raw logs into intelligence</p>
           <p className="text-xs text-slate-600 mt-2">
             Released under the{" "}
             <Link href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-400">
