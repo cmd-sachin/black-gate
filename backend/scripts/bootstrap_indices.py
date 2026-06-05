@@ -44,9 +44,8 @@ from elastic_client import (  # noqa: E402
     INCIDENT_INDEX,
     CAMPAIGN_INDEX,
     MITRE_KNOWLEDGE_INDEX,
-    AGENT_MEMORY_INDEX as ORG_AGENT_MEMORY_INDEX,  # "campaigniq.agent_memory"
+    AGENT_MEMORY_INDEX,  # single "blackgate.agent_memory" for both memory writers
 )
-from services.elastic_memory import AGENT_MEMORY_INDEX as PIPELINE_AGENT_MEMORY_INDEX  # noqa: E402  # "blackgate.agent_memory"
 
 # Reusable field templates -------------------------------------------------
 _TEXT_KW = {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 1024}}}
@@ -156,10 +155,13 @@ INDEX_MAPPINGS: dict[str, dict] = {
             "updated_at": {"type": "date"},
         },
     },
-    # Pipeline agent memory written by services/elastic_memory.save_to_elastic_memory.
-    PIPELINE_AGENT_MEMORY_INDEX: {
+    # Agent memory — a single index for both writers:
+    #   * services/elastic_memory.save_to_elastic_memory -> memory.* / linked_* / confidence
+    #   * elastic_client.write_organizational_memory      -> context / category / content
+    AGENT_MEMORY_INDEX: {
         "dynamic": True,
         "properties": {
+            # Pipeline incident-summary memory.
             "memory": {
                 "properties": {
                     "type": {"type": "keyword"},
@@ -170,14 +172,7 @@ INDEX_MAPPINGS: dict[str, dict] = {
             "linked_incidents": {"type": "keyword"},
             "confidence": {"type": "float"},
             "created_at": {"type": "date"},
-        },
-    },
-    # Organizational memory written by elastic_client.write_organizational_memory.
-    # NOTE: this is a SECOND, separately-named agent-memory index. The two writers
-    # disagree on the name (see warning printed at the end of a run).
-    ORG_AGENT_MEMORY_INDEX: {
-        "dynamic": True,
-        "properties": {
+            # Organizational notes.
             "context": _TEXT_KW,
             "category": {"type": "keyword"},
             "content": {"type": "text"},
@@ -242,15 +237,6 @@ def bootstrap(only: list[str] | None, recreate: bool, confirmed: bool) -> int:
     print(
         f"\nDone. created={created} recreated={recreated} skipped={skipped} failed={failed}"
     )
-    if PIPELINE_AGENT_MEMORY_INDEX != ORG_AGENT_MEMORY_INDEX and (
-        not only or {PIPELINE_AGENT_MEMORY_INDEX, ORG_AGENT_MEMORY_INDEX} & set(only)
-    ):
-        print(
-            f"\n[WARN] Two agent-memory indices exist because the writers disagree on the name:\n"
-            f"       - {PIPELINE_AGENT_MEMORY_INDEX!r} (services/elastic_memory.save_to_elastic_memory)\n"
-            f"       - {ORG_AGENT_MEMORY_INDEX!r} (elastic_client.write_organizational_memory)\n"
-            f"       Consider consolidating these in code to a single index."
-        )
     return 1 if failed else 0
 
 

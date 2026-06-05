@@ -103,10 +103,11 @@ if not es_connected:
 
 ALERT_INDEX = "security-alerts"
 INCIDENT_INDEX = "security-incidents"
-MEMORY_INDEX = "agent-memory"
 CAMPAIGN_INDEX = "blackgate.campaigns"
 MITRE_KNOWLEDGE_INDEX = "blackgate.mitre_knowledge"
-AGENT_MEMORY_INDEX = "campaigniq.agent_memory"
+# Single agent-memory index for both pipeline incident summaries
+# (services.elastic_memory) and organizational notes (write_organizational_memory).
+AGENT_MEMORY_INDEX = "blackgate.agent_memory"
 
 def write_organizational_memory(context: str, category: str, content: str) -> dict:
     """

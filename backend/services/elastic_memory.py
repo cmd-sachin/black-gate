@@ -3,11 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from elastic_client import es
+from elastic_client import es, AGENT_MEMORY_INDEX
 
 CAMPAIGN_INDEX = "blackgate.campaigns"
 MITRE_MEMORY_INDEX = "blackgate.mitre_knowledge"
-AGENT_MEMORY_INDEX = "blackgate.agent_memory"
 
 
 def save_to_elastic_memory(incident: dict):
