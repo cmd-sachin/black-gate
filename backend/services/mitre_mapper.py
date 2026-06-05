@@ -106,9 +106,12 @@ def _upsert_technique(
     sources = set(current.get("sources", []))
     sources.add(source)
 
+    resolved_name = name or current.get("name") or "Unknown ATT&CK technique"
     techniques[technique_id] = {
         "technique_id": technique_id,
-        "name": name or current.get("name") or "Unknown ATT&CK technique",
+        # `name` kept for existing readers; `technique_name` matches the spec output shape.
+        "name": resolved_name,
+        "technique_name": resolved_name,
         "tactic": tactic or current.get("tactic") or "Unknown",
         "confidence": max(float(current.get("confidence", 0)), confidence),
         "source": "hybrid" if len(sources) > 1 else next(iter(sources)),
@@ -117,7 +120,12 @@ def _upsert_technique(
     }
 
 
-def _extract_elastic_security_mitre(doc: dict[str, Any], techniques: dict[str, dict[str, Any]], evidence_prefix: str):
+def _extract_elastic_security_mitre(
+    doc: dict[str, Any],
+    techniques: dict[str, dict[str, Any]],
+    evidence_prefix: str,
+    source: str = "elastic_rule",
+):
     """Extract ECS/Elastic Security ATT&CK mappings from alerts and detection rule metadata."""
     for threat_doc in _walk_dicts(doc):
         technique_values = []
@@ -141,7 +149,7 @@ def _extract_elastic_security_mitre(doc: dict[str, Any], techniques: dict[str, d
                     technique.get("id"),
                     technique.get("name"),
                     tactic=tactic_name,
-                    source="elastic_security",
+                    source=source,
                     confidence=0.95,
                     evidence=f"{evidence_prefix}: Elastic Security threat technique metadata",
                 )
@@ -155,7 +163,7 @@ def _extract_elastic_security_mitre(doc: dict[str, Any], techniques: dict[str, d
             str(technique_id),
             str(names[index]) if index < len(names) else None,
             tactic=str(tactics[0]) if tactics else None,
-            source="elastic_security",
+            source=source,
             confidence=0.95,
             evidence=f"{evidence_prefix}: ECS threat.technique fields",
         )
@@ -248,6 +256,7 @@ def _search_related_elastic_security_alerts(alerts: list[dict[str, Any]], techni
             hit.get("_source", {}),
             techniques,
             f"Related Elastic alert {hit.get('_id')}",
+            source="elastic_related",
         )
 
 
@@ -288,7 +297,7 @@ def _search_mitre_knowledge(alerts: list[dict[str, Any]], techniques: dict[str, 
             technique.get("id") or source.get("technique_id"),
             technique.get("name") or source.get("name"),
             tactic=tactic.get("name") if isinstance(tactic, dict) else source.get("tactic"),
-            source="elasticsearch_mitre_knowledge",
+            source="mitre_knowledge",
             confidence=min(0.88, 0.55 + (score / 20)),
             evidence=f"Matched Elasticsearch MITRE knowledge document {hit.get('_id')}",
         )
@@ -307,7 +316,7 @@ def _fallback_local_mapping(alerts: list[dict[str, Any]], techniques: dict[str, 
                     mapping["id"],
                     mapping["name"],
                     tactic=mapping["tactic"],
-                    source="local_fallback",
+                    source="deterministic",
                     confidence=0.45,
                     evidence=f"Fallback signature match: {sig_pattern}",
                 )
@@ -319,21 +328,40 @@ def _fallback_local_mapping(alerts: list[dict[str, Any]], techniques: dict[str, 
                 "T1071.004",
                 "Application Layer Protocol: DNS",
                 tactic="Command and Control",
-                source="local_fallback",
+                source="deterministic",
                 confidence=0.35,
                 evidence="Fallback Zeek DNS activity heuristic",
             )
+
+
+# Below this max-confidence, the deterministic Elastic evidence is considered
+# incomplete/ambiguous and the Gemini analyst layer should select or add
+# techniques (TARGET_ARCHITECTURE.md, MITRE Mapping Logic, step 4).
+LLM_TRIGGER_CONFIDENCE = 0.80
+
+
+def evidence_is_incomplete(mitre_list: list[dict[str, Any]], floor: float = LLM_TRIGGER_CONFIDENCE) -> bool:
+    """True when deterministic mapping found nothing, or nothing it is confident about.
+
+    Callers use this to gate the Gemini analyst layer so the LLM only selects or
+    adds technique IDs when Elastic evidence is missing or low-confidence.
+    """
+    if not mitre_list:
+        return True
+    return max((float(t.get("confidence", 0)) for t in mitre_list), default=0.0) < floor
 
 
 def map_alerts_to_mitre(alerts):
     """
     Resolve MITRE ATT&CK mappings with Elastic Security as the primary authority.
 
-    Order of evidence:
-    1. ATT&CK fields already present on Elastic Security alerts/rules.
-    2. Related Elastic Security alerts with threat technique metadata.
-    3. Elasticsearch MITRE knowledge documents.
-    4. Local Suricata/Zeek heuristics as low-confidence fallback only.
+    Layered evidence (each technique stores confidence, evidence, and source):
+    1. `elastic_rule`      — ATT&CK fields already on the input Elastic alerts/rules.
+    2. `elastic_related`   — related Elastic Security alerts with threat technique metadata.
+    3. `mitre_knowledge`   — Elasticsearch `blackgate.mitre_knowledge` candidates.
+    4. `gemini`            — analyst layer added downstream when evidence_is_incomplete().
+    5. `deterministic`     — local Suricata/Zeek heuristics, low-confidence fallback only.
+    Overlapping sources collapse to `hybrid`.
     """
     behaviors = set()
     techniques: dict[str, dict[str, Any]] = {}

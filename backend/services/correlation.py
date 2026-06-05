@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types
 
 from elastic_client import es, ALERT_INDEX, INCIDENT_INDEX
-from .mitre_mapper import map_alerts_to_mitre
+from .mitre_mapper import map_alerts_to_mitre, evidence_is_incomplete
 from .campaigns import cluster_campaign
 from .enrichment import enrich_entities
 from .elastic_memory import save_to_elastic_memory
@@ -146,12 +146,20 @@ def fetch_recent_alerts(limit: int = 100):
     )
     return [hit["_source"] for hit in response["hits"]["hits"]]
 
-def merge_mitre_techniques(base_list: List[Dict], advanced_list: List[Dict]) -> List[Dict]:
-    """Merges Elastic-derived and LLM-derived MITRE techniques without weakening stronger evidence."""
+def merge_mitre_techniques(base_list: List[Dict], advanced_list: List[Dict], allow_new: bool = True) -> List[Dict]:
+    """Merges Elastic-derived and LLM-derived MITRE techniques without weakening stronger evidence.
+
+    When ``allow_new`` is False, Gemini may only enrich techniques already found
+    deterministically (extra evidence/confidence) and may not introduce brand-new
+    technique IDs — honouring "Gemini selects or adds technique IDs only when
+    Elastic evidence is incomplete" (TARGET_ARCHITECTURE.md, MITRE step 4).
+    """
     techniques = {t["technique_id"]: dict(t) for t in base_list if t.get("technique_id")}
     for t in advanced_list:
         technique_id = t.get("technique_id")
         if not technique_id:
+            continue
+        if not allow_new and technique_id not in techniques:
             continue
 
         current = techniques.get(technique_id, {})
@@ -247,8 +255,14 @@ async def correlate_alerts(alerts, max_llm_incidents: int = 1):
                 "campaign_description": "Cluster inferred from technique and infrastructure overlap.",
             }
 
-        # Merge advanced behaviors and techniques
-        enriched_mitre = merge_mitre_techniques(mitre_list, llm_intel.get("advanced_mitre_techniques", []))
+        # Merge advanced behaviors and techniques. Gemini may add new technique IDs
+        # only when the deterministic Elastic evidence was incomplete (MITRE step 4).
+        mitre_incomplete = evidence_is_incomplete(mitre_list)
+        enriched_mitre = merge_mitre_techniques(
+            mitre_list,
+            llm_intel.get("advanced_mitre_techniques", []),
+            allow_new=mitre_incomplete,
+        )
         for mitre in enriched_mitre:
             behaviors.append(mitre["name"].lower().replace(" ", "_"))
         behaviors = list(set(behaviors))
@@ -265,6 +279,11 @@ async def correlate_alerts(alerts, max_llm_incidents: int = 1):
             },
             "behaviors": behaviors,
             "mitre": enriched_mitre,
+            "mitre_coverage": {
+                "deterministic_complete": not mitre_incomplete,
+                "technique_count": len(enriched_mitre),
+                "sources": sorted({t.get("source") for t in enriched_mitre if t.get("source")}),
+            },
             "campaign": {
                 "cluster_id": campaign_info["cluster_id"],
                 "confidence": campaign_info["confidence"],
