@@ -10,12 +10,15 @@ import {
   Info,
   CheckCircle2,
   XCircle,
-  MapPin,
   Activity,
   FileText,
   Terminal,
-  ChevronRight
+  ChevronRight,
+  Clock,
+  Layers
 } from "lucide-react";
+import MitreMatrix from "@/components/MitreMatrix";
+import EvidenceTimeline from "@/components/EvidenceTimeline";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -158,35 +161,38 @@ export default function IncidentDetailPage() {
 
             {/* MITRE ATT&CK */}
             <div className="bg-[#0F172A] border border-slate-800 rounded overflow-hidden">
-              <div className="px-4 py-2 bg-[#0A0F1C] border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <Target className="w-3.5 h-3.5 text-amber-500" /> MITRE ATT&CK Mapping
+              <div className="px-4 py-2 bg-[#0A0F1C] border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-amber-500" /> MITRE ATT&CK Matrix
+                </span>
+                {incident.mitre_coverage && (
+                  <span className="flex items-center gap-1.5 text-[9px] font-mono normal-case tracking-normal">
+                    <Layers className="w-3 h-3 text-slate-500" />
+                    <span className={incident.mitre_coverage.deterministic_complete ? "text-emerald-400" : "text-amber-400"}>
+                      {incident.mitre_coverage.deterministic_complete ? "Elastic-confident" : "Gemini-assisted"}
+                    </span>
+                    <span className="text-slate-600">·</span>
+                    <span className="text-slate-400">{incident.mitre_coverage.technique_count} techniques</span>
+                  </span>
+                )}
               </div>
               <div className="p-4">
-                {incident.mitre?.length > 0 ? (
-                  <div className="space-y-2">
-                    {incident.mitre.map((m: any, idx: number) => (
-                      <div key={idx} className="p-3 bg-[#020617] border border-slate-800 rounded flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs text-cyan-400">{m.technique_id}</span>
-                            <span className="text-xs font-bold text-slate-300">{m.name}</span>
-                          </div>
-                          <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 border border-slate-700 px-1.5 py-0.5 rounded">{m.tactic}</span>
-                        </div>
-                        {m.evidence?.length > 0 && (
-                          <div className="text-[10px] text-slate-400 pl-2 border-l border-slate-700">
-                            <span className="font-bold text-slate-500 mb-1 block">Evidence</span>
-                            <ul className="list-disc list-inside">
-                              {m.evidence.map((e: string, i: number) => <li key={i}>{e}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <span className="text-xs text-slate-500 font-mono">No MITRE techniques mapped.</span>
+                <MitreMatrix techniques={incident.mitre} />
+                {incident.mitre_coverage?.sources?.length > 0 && (
+                  <p className="mt-3 text-[10px] text-slate-500">
+                    Mapping provenance: <span className="text-slate-400 font-mono">{incident.mitre_coverage.sources.join(", ")}</span>
+                  </p>
                 )}
+              </div>
+            </div>
+
+            {/* Evidence Timeline */}
+            <div className="bg-[#0F172A] border border-slate-800 rounded overflow-hidden">
+              <div className="px-4 py-2 bg-[#0A0F1C] border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-cyan-500" /> Evidence Timeline
+              </div>
+              <div className="p-4">
+                <EvidenceTimeline alerts={incident.raw_alerts_preview} />
               </div>
             </div>
 
@@ -251,10 +257,21 @@ export default function IncidentDetailPage() {
                   <Target className="w-3 h-3" />
                 </div>
                 <div className="p-4 text-xs space-y-2">
-                  <p className="text-white font-bold">{incident.campaign.name}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-white font-bold">{incident.campaign.name}</p>
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded border text-[8px] font-bold uppercase tracking-wider ${incident.campaign.is_new ? "text-amber-400 border-amber-500/30 bg-amber-500/10" : "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"}`}>
+                      {incident.campaign.is_new ? "New cluster" : "Merged"}
+                    </span>
+                  </div>
                   <p className="font-mono text-cyan-400 text-[10px]">{incident.campaign.cluster_id}</p>
                   <p className="text-slate-400">{incident.campaign.description}</p>
-                  
+                  {typeof incident.campaign.match_score === "number" && incident.campaign.match_score > 0 && (
+                    <div className="flex items-center justify-between bg-[#020617] px-2 py-1 border border-slate-800 rounded text-[10px]">
+                      <span className="text-slate-500">Similarity to existing campaign</span>
+                      <span className="font-mono text-cyan-400">{Math.round(incident.campaign.match_score * 100)}%</span>
+                    </div>
+                  )}
+
                   <Link href={`/campaigns/${incident.campaign.cluster_id}`} className="mt-3 block text-center px-3 py-1.5 bg-[#020617] border border-cyan-900 hover:border-cyan-500 text-cyan-400 rounded transition-colors font-bold uppercase tracking-wider text-[10px]">
                     View Campaign Dossier
                   </Link>
