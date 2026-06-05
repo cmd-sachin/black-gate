@@ -36,6 +36,19 @@ def save_to_elastic_memory(incident: dict):
                     if (params.incident_id != null && !ctx._source.related_incident_ids.contains(params.incident_id)) {
                         ctx._source.related_incident_ids.add(params.incident_id);
                     }
+                    // Accumulate the feature sets future incidents are scored against.
+                    if (ctx._source.campaign.techniques == null) { ctx._source.campaign.techniques = []; }
+                    for (t in params.techniques) {
+                        if (!ctx._source.campaign.techniques.contains(t)) { ctx._source.campaign.techniques.add(t); }
+                    }
+                    if (ctx._source.campaign.infrastructure == null) { ctx._source.campaign.infrastructure = []; }
+                    for (i in params.infrastructure) {
+                        if (!ctx._source.campaign.infrastructure.contains(i)) { ctx._source.campaign.infrastructure.add(i); }
+                    }
+                    if (ctx._source.campaign.signatures == null) { ctx._source.campaign.signatures = []; }
+                    for (s in params.signatures) {
+                        if (!ctx._source.campaign.signatures.contains(s)) { ctx._source.campaign.signatures.add(s); }
+                    }
                 """,
                 "params": {
                     "name": campaign.get("name", "Unknown Campaign"),
@@ -43,6 +56,9 @@ def save_to_elastic_memory(incident: dict):
                     "confidence": campaign.get("confidence", 0.0),
                     "entities": entities,
                     "incident_id": incident_id,
+                    "techniques": campaign.get("techniques", []),
+                    "infrastructure": campaign.get("infrastructure", []),
+                    "signatures": campaign.get("signatures", []),
                     "now": now,
                 },
             },
@@ -52,6 +68,9 @@ def save_to_elastic_memory(incident: dict):
                     "name": campaign.get("name", "Unknown Campaign"),
                     "description": campaign.get("description", ""),
                     "confidence": campaign.get("confidence", 0.0),
+                    "techniques": campaign.get("techniques", []),
+                    "infrastructure": campaign.get("infrastructure", []),
+                    "signatures": campaign.get("signatures", []),
                     "first_seen": now,
                     "last_seen": now,
                 },

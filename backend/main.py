@@ -303,10 +303,10 @@ def elastic_search(req: ElasticSearchRequest):
 # =====================================================================
 
 @app.get("/incidents")
-def get_incidents():
+async def get_incidents():
     """Run the full pipeline: fetch alerts → correlate → MITRE map → GeoIP → campaign cluster → save to Elasticsearch."""
     alerts = fetch_recent_alerts()
-    incidents = correlate_alerts(alerts)
+    incidents = await correlate_alerts(alerts)
     return {
         "incident_count": len(incidents),
         "incidents": incidents
@@ -385,7 +385,7 @@ async def trigger_agent(req: AgentRequest | None = None, prompt: str | None = No
 async def run_simulated_soc(req: SimulatedRunRequest | None = None):
     """Run the full deterministic backend SOC simulation pipeline for transparent frontend playback."""
     try:
-        helper = run_simulated_ids_pipeline()
+        helper = await run_simulated_ids_pipeline()
         master = await run_master_soc_pipeline(max_llm_incidents=1)
         return {"status": "ok", "helper": helper, "master": master, "prompt": req.prompt if req else ""}
     except Exception as e:

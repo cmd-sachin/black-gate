@@ -204,8 +204,12 @@ async def correlate_alerts(alerts, max_llm_incidents: int = 1):
         # Entity Extraction
         ips = {source_ip}
         domains = set()
-        
+        signatures = set()
+
         for a in related_alerts:
+            sig = a.get("alert") or a.get("signature")
+            if sig:
+                signatures.add(sig)
             for domain in (
                 first_value(a, "query", "dns.question.name"),
                 first_value(a, "host", "url.domain"),
@@ -225,8 +229,8 @@ async def correlate_alerts(alerts, max_llm_incidents: int = 1):
         # 1. Elastic Security / Elasticsearch-first MITRE mapping
         behaviors, mitre_list = map_alerts_to_mitre(related_alerts)
         
-        # 2. Calculate Campaign Clustering base
-        campaign_info = cluster_campaign(mitre_list, ips, domains)
+        # 2. Calculate Campaign Clustering base (multi-factor similarity vs. existing campaigns)
+        campaign_info = cluster_campaign(mitre_list, ips, domains, signatures=signatures)
 
         # 3. Cognitive Enrichment Layer (AI Agent Brain)
         if index < max_llm_incidents:
@@ -265,7 +269,12 @@ async def correlate_alerts(alerts, max_llm_incidents: int = 1):
                 "cluster_id": campaign_info["cluster_id"],
                 "confidence": campaign_info["confidence"],
                 "name": llm_intel.get("campaign_name", "Unknown Campaign"),
-                "description": llm_intel.get("campaign_description", "Adversary behavior cluster.")
+                "description": llm_intel.get("campaign_description", "Adversary behavior cluster."),
+                "techniques": campaign_info.get("techniques", []),
+                "signatures": campaign_info.get("signatures", []),
+                "infrastructure": campaign_info.get("infrastructure", []),
+                "match_score": campaign_info.get("match_score", 0.0),
+                "is_new": campaign_info.get("is_new", True),
             },
             "summary": llm_intel.get("analyst_summary", "Threat detection correlation."),
             "narrative": llm_intel.get("detailed_narrative", "Historical packet trace correlation."),

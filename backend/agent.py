@@ -81,9 +81,9 @@ async def trigger_correlation_pipeline() -> str:
         return f"Error triggering pipeline: {e}"
 
 
-def helper_monitor_and_ingest_simulated_network() -> dict:
+async def helper_monitor_and_ingest_simulated_network() -> dict:
     """Helper subagent tool: monitor simulated network, run IDS layers, and ingest outputs."""
-    result = run_simulated_ids_pipeline()
+    result = await run_simulated_ids_pipeline()
     add_event("helper.done", "Helper subagent finished monitoring+IDS ingest", result)
     return result
 
