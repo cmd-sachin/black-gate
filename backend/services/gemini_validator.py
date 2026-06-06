@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
+from .gemini_retry import generate_content_with_retry
+
 try:
     client = genai.Client()
 except Exception as e:
@@ -100,7 +102,9 @@ Review this incident and determine whether it's a genuine security threat or noi
 - Multiple low-confidence heuristic-only MITRE mappings suggest noise
 - Consider whether source/destination IPs are private vs public"""
 
-        response = await client.aio.models.generate_content(
+        response = await generate_content_with_retry(
+            client,
+            label="validate-incident",
             model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -148,7 +152,9 @@ async def validate_campaign(campaign: dict, related_incidents: list[dict]) -> di
 
 Determine if the incidents share tactical, infrastructural, or temporal overlap to constitute a real campaign."""
 
-        response = await client.aio.models.generate_content(
+        response = await generate_content_with_retry(
+            client,
+            label="validate-campaign",
             model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             contents=prompt,
             config=types.GenerateContentConfig(

@@ -10,6 +10,7 @@ from google.genai import types
 
 from elastic_client import es, ALERT_INDEX, INCIDENT_INDEX
 from .mitre_mapper import map_alerts_to_mitre, evidence_is_incomplete
+from .gemini_retry import generate_content_with_retry
 from .campaigns import cluster_campaign
 from .enrichment import enrich_entities
 from .elastic_memory import save_to_elastic_memory
@@ -97,8 +98,10 @@ Analyze this security telemetry payload and perform structured forensic enrichme
 4. Assign a professional campaign actor name and actor description to this cluster of threat activities.
 """
 
-        # Call Gemini using Structured Outputs
-        response = await client.aio.models.generate_content(
+        # Call Gemini using Structured Outputs, riding out transient 503/429s.
+        response = await generate_content_with_retry(
+            client,
+            label="enrichment",
             model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             contents=prompt,
             config=types.GenerateContentConfig(
